@@ -111,11 +111,7 @@ public class MongoEntityPersister extends NativeEntryEntityPersister<DBObject, O
     @Override
     protected void setEmbeddedCollection(DBObject nativeEntry, String key, Collection<?> instances,
             List<DBObject> embeddedEntries) {
-        if (instances == null || instances.isEmpty()) {
-            return;
-        }
-
-        nativeEntry.put(key, embeddedEntries.toArray());
+        nativeEntry.put(key, (instances == null ? null : embeddedEntries.toArray()));
     }
 
     @Override
@@ -520,11 +516,36 @@ public class MongoEntityPersister extends NativeEntryEntityPersister<DBObject, O
         });
     }
 
+    private DBObject removeNullEntries(DBObject nativeEntry) {
+        for(String key : new HashSet<String>(nativeEntry.keySet())) {
+            Object o = nativeEntry.get(key);
+            if(o == null) {
+                nativeEntry.removeField(key);
+            } else if(o instanceof Object[]) {
+                for(Object o2 : (Object[])o) {
+                    if(o2 instanceof DBObject) {
+                        removeNullEntries((DBObject)o2);
+                    }
+                }
+            } else if(o instanceof List) {
+                for(Object o2 : (List)o) {
+                    if(o2 instanceof DBObject) {
+                        removeNullEntries((DBObject)o2);
+                    }
+                }
+            } else if(o instanceof DBObject) {
+                removeNullEntries((DBObject)o);
+            }
+        }
+        return nativeEntry;
+    }
+
     @Override
     protected Object storeEntry(final PersistentEntity persistentEntity, final EntityAccess entityAccess,
                                 final Object storeId, final DBObject nativeEntry) {
         return mongoTemplate.execute(new DbCallback<Object>() {
             public Object doInDB(DB con) throws MongoException, DataAccessException {
+                removeNullEntries(nativeEntry);
                 nativeEntry.put(MONGO_ID_FIELD, storeId);
                 return nativeEntry.get(MONGO_ID_FIELD);
             }
@@ -548,6 +569,42 @@ public class MongoEntityPersister extends NativeEntryEntityPersister<DBObject, O
         return collectionName;
     }
 
+    private DBObject modifyNullsToUnsets(DBObject nativeEntry) {
+        DBObject unsets = new BasicDBObject();
+        DBObject sets = new BasicDBObject();
+        for(String key : nativeEntry.keySet()) {
+            Object o = nativeEntry.get(key);
+            if(o == null) {
+                unsets.put(key, 1);
+            } else if("_id".equals(key)) {
+            } else if(o instanceof Object[]) {
+                sets.put(key, o);
+                for(Object o2 : (Object[])o) {
+                    if(o2 instanceof DBObject) {
+                        removeNullEntries((DBObject)o2);
+                    }
+                }
+            } else if(o instanceof List) {
+                sets.put(key, o);
+                for(Object o2 : (List)o) {
+                    if(o2 instanceof DBObject) {
+                        removeNullEntries((DBObject)o2);
+                    }
+                }
+            } else if(o instanceof DBObject) {
+                sets.put(key, removeNullEntries((DBObject)o));
+            } else {
+                sets.put(key, o);
+            }
+        }
+        DBObject newEntry = new BasicDBObject();
+        newEntry.put("$set", sets);
+        if(!unsets.keySet().isEmpty())
+            newEntry.put("$unset", unsets);
+        return newEntry;
+    }
+
+
     @Override
     public void updateEntry(final PersistentEntity persistentEntity, final EntityAccess ea,
             final Object key, final DBObject entry) {
@@ -563,8 +620,10 @@ public class MongoEntityPersister extends NativeEntryEntityPersister<DBObject, O
                     checkVersion(ea, previous, persistentEntity, key);
                 }
 
+                DBObject newEntry = modifyNullsToUnsets(entry);
+
                 MongoSession mongoSession = (MongoSession) session;
-                dbCollection.update(dbo, entry, false, false, mongoSession.getWriteConcern());
+                dbCollection.update(dbo, newEntry, false, false, mongoSession.getWriteConcern());
                 return null;
             }
         });

@@ -853,7 +853,7 @@ public abstract class NativeEntryEntityPersister<T, K> extends LockableEntityPer
                                 }
 
                                 if(association.doesCascade(CascadeType.PERSIST)) {
-                                    
+
                                     if(association.isBidirectional()) {
                                         Association inverseSide = association.getInverseSide();
                                         if(inverseSide != null) {
@@ -994,7 +994,8 @@ public abstract class NativeEntryEntityPersister<T, K> extends LockableEntityPer
         // For embedded properties simply set the entry value, the underlying implementation
         // will have to store the embedded entity in an appropriate way (as a sub-document in a document store for example)
         Object embeddedInstances = entityAccess.getProperty(prop.getName());
-        if (!(embeddedInstances instanceof Collection) || ((Collection)embeddedInstances).isEmpty()) {
+        if (!(embeddedInstances instanceof Collection)) {
+            setEmbeddedCollection(e, key, null, null);
             return;
         }
 
@@ -1011,6 +1012,7 @@ public abstract class NativeEntryEntityPersister<T, K> extends LockableEntityPer
     protected void handleEmbeddedToOne(Association association, String key, EntityAccess entityAccess, T nativeEntry) {
         Object embeddedInstance = entityAccess.getProperty(association.getName());
         if (embeddedInstance == null) {
+            setEmbedded(nativeEntry, key, null);
             return;
         }
 
@@ -1458,7 +1460,7 @@ public abstract class NativeEntryEntityPersister<T, K> extends LockableEntityPer
                                     toIndex.put(property, null);
                                 }
                             }
-                            
+
                         }
                         else {
                             toIndex.put(property, value);

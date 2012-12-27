@@ -69,6 +69,13 @@ class EmbeddedCollectionAndInheritanceSpec extends GormDatastoreSpec{
             p.pets[0].name == "Fred"
 	    p.pets[0].anotherField == 'bar'
 
+        when:"The list is empty"
+            p.pets = []
+            p.save(flush:true)
+            session.clear()
+            p = ECAISPerson.get(p.id)
+        then:"The update is correctly applied"
+            p.pets.size() == 0
     }
 
     @Override

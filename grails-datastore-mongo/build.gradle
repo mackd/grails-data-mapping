@@ -1,4 +1,4 @@
-version = "1.0.1.BUILD-SNAPSHOT"
+version = "1.0.1.JDT8"
 dependencies {
     compile project(":grails-datastore-core")
 
